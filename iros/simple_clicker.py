@@ -66,29 +66,6 @@ def get_kp_clouds(listener, cloud_topic, num_clouds):
         return xyz_tfs, rgb_plots
 
 
-def get_last_kp_loc(exec_keypts, desired_keypt, current_seg):        
-    
-    search_seg = current_seg - 1
-       
-    while(True):
-        if search_seg < 0:
-            print "Reached beginning of execution and couldn't find desired keypoint! Aborting..."
-            sys.exit(1)            
-        else:
-            search_seg_names = exec_keypts[search_seg]["names"]
-            search_seg_locs = exec_keypts[search_seg]["locations"]
-        
-            for k in range(len(search_seg_names)):
-                if search_seg_names[k] == desired_keypt:
-                    kp_loc = search_seg_locs[k]
-                    kp_found = True
-            
-        if kp_found:        
-            return kp_loc, search_seg
-        else:
-            search_seg -= 1
-
-
 def show_pointclouds(clouds, WIN_NAME):
     nc = len(clouds)
 
@@ -106,12 +83,10 @@ def show_pointclouds(clouds, WIN_NAME):
 #########################################
 ### find all keypoints
 #########################################
-def get_kp_locations(kp_names, exec_keypts, current_seg, cloud_topic):
-    listener = ru.get_tf_listener()
-    kp_locations = []
-    #kp_xypixels = []
-    
+def get_kp_locations(kp_names, cloud_topic):
+    listener = ru.get_tf_listener()  
     seg_kps = []
+    
     if kp_names[0] == "tip_transform":         
         while True:
             xyz_tfs, rgb_plots = get_kp_clouds(listener, cloud_topic, 30)
@@ -127,7 +102,6 @@ def get_kp_locations(kp_names, exec_keypts, current_seg, cloud_topic):
             kp_loc, pts = find_red_block(xyz_tfs, rgb_plots, WIN_NAME)
             if pts > 0: 
                 seg_kps.append(kp_loc)
-                #kp_xypixels.append((0,0))
                 break
             else: 
                 print colorize("Couldn't find the keypoint! Trying again","red", True, True)             
@@ -138,18 +112,16 @@ def get_kp_locations(kp_names, exec_keypts, current_seg, cloud_topic):
             kp_loc = find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME)
             if kp_loc[2] > 0.8: 
                 seg_kps.append(kp_loc)
-                #kp_xypixels.append((0,0))
                 break                
             else: 
                 print colorize("Didn't find a high enough point! Trying again","red", True, True)              
             
     else:
         xyz_tf, rgb_plot = get_kp_clouds(listener, cloud_topic, 1)
-        np.save("/tmp/xyz_tf.npy",xyz_tf)
-        np.save("/tmp/rgb.npy",rgb_plot)
+        #np.save("/tmp/xyz_tf.npy",xyz_tf)
+        #np.save("/tmp/rgb.npy",rgb_plot)
         for k in range(len(kp_names)):
-            kp_loc = find_kp(kp_names[k], xyz_tf, rgb_plot, exec_keypts, current_seg, WIN_NAME)
-            #kp_xypixels.append(kp_xypix)
+            kp_loc = find_kp(kp_names[k], xyz_tf, rgb_plot, WIN_NAME)
             seg_kps.append(kp_loc)
                 
     return seg_kps
@@ -159,7 +131,7 @@ def get_kp_locations(kp_names, exec_keypts, current_seg, cloud_topic):
 #########################################
 ### find a single keypoint
 #########################################
-def find_kp(kp, xyz_tf, rgb_plot, past_keypts, current_seg, WIN_NAME):
+def find_kp(kp, xyz_tf, rgb_plot, WIN_NAME):
     ### clicking set-up 
     class GetClick:
         x = None
@@ -184,24 +156,58 @@ def find_kp(kp, xyz_tf, rgb_plot, past_keypts, current_seg, WIN_NAME):
         if k == -1:
             continue
         else:
-            last_loc, found_seg = get_last_kp_loc(past_keypts, kp, current_seg)
-            print kp, "found in segment %s at location %s"%(found_seg, last_loc)
-            return last_loc
-
-    row_kp = gc.x
-    col_kp = gc.y
+            print 'last known point for %s will be used'%kp
+            return (np.NaN, np.NaN, np.NaN)
     
-    cv2.circle(rgb_plot, (row_kp, col_kp), 5, (0, 0, 255), -1)
-    cv2.imshow(WIN_NAME, rgb_plot)    
-    cv2.waitKey(100)
-
     xyz_tf[np.isnan(xyz_tf)] = -2
-    x, y, z = xyz_tf[col_kp, row_kp]
+    
+    col_kp = gc.x
+    row_kp = gc.y
+    
+    win_idx = 0
+    xyz = []
 
-    print kp, "3d location", x, y, z
+    cv2.circle(rgb_plot, (col_kp, row_kp), 5, (0, 0, 255), -1)
+    cv2.imshow(WIN_NAME, rgb_plot)    
+    cv2.waitKey(100)    
 
-    #return (x, y, z), (col_kp, row_kp)
-    return (x, y, z)
+    
+
+    for winsize in [1,3,9,27,51,153]:
+        radius = winsize//2
+        xyz_window = xyz_tf[row_kp-radius:row_kp+radius+1, col_kp-radius:col_kp+radius+1,:]
+        if (xyz_window != -2).any():
+            if winsize > 1: print colorize("warning: clicked point was nan, so we used a %ix%i window"%(winsize,winsize), "magenta")
+            return np.median(xyz_window[xyz_window[:,:,2] != -2], axis=0)
+    raise Exception("couldn't get window without nans")
+
+    #raise    
+    #x, y, z = xyz_tf[col_kp, row_kp]
+
+    #print 'np.asarray(x,y,z)', np.asarray(x,y,z)
+    
+    #if np.asarray(x,y,z) == -2.0:
+        #while True:
+            #print "got a NaN in the point cloud...expanding pixel window size"
+            #win_idx += 1        
+            
+            #xyz.extend(xyz_tf[(col_kp - win_idx):(col_kp + win_idx), (row_kp - win_idx):(row_kp + win_idx), :])
+            
+            #xyz_avg = np.median(xyz, axis=0) 
+            
+            #print 'new way xyz', xyz
+            #print 'new way xyz_avg', xyz_avg
+            
+            #if (xyz_avg==-2).any():
+                #print "still getting Nans, increasing window size more"
+                #continue
+            #else: 
+                #print '%s 3d location with pixel window size %s'%(kp, win_idx), xyz_avg
+                #return xyz_avg        
+    #else:
+        #print '%s 3d location'%kp, x, y, z
+        #return (x, y, z)
+    
 
 
 #########################################
@@ -362,14 +368,7 @@ def find_red_block(xyz_tfs, rgbs, WIN_NAME):
         
         high_red_xyz.extend(xyz_tfs[i][rowmin:rowmax, colmin:colmax, :][total_mask])
     
-    xyz_avg = np.median(high_red_xyz,axis=0)
-    
-    from jds_image_proc.pcl_utils import xyz2uv
-    row, col = xyz2uv(xyz_avg).astype('int')[0]      
-
-    cv2.circle(rgb_plot, (row, col), 3, (255, 0, 0), 2)
-    cv2.imshow(WIN_NAME, rgb_plot)
-    cv2.waitKey(100)    
+    xyz_avg = np.median(high_red_xyz, axis=0)     
 
     print 'Needle end location', xyz_avg
  

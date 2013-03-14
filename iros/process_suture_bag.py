@@ -138,7 +138,7 @@ print 'Extracting look_time point clouds...'
 look_clouds = bp.get_transformed_clouds(bag, look_times)
 
 window_name = "Find Keypoints"
-keypt_list = ['lh', 'rh', 'tc', 'mc', 'bc', 'ne', 'nt', 'ntt', 'stand', 'rzr', 'none']
+keypt_list = ['lh', 'rh', 'tc', 'mc', 'bc', 'ne', 'nt', 'ntt', 'stand', 'rzr']
 keypoints_locations = []
 keypoints_names = []
 
@@ -195,7 +195,7 @@ for s in range(SEGNUM):
                     xyz_tfs.append(razor_clouds[i][0].copy())
                     rgb_plots.append(razor_clouds[i][1].copy())              
                     
-                rzr_loc, valid_pts = sc.find_needle_end(xyz_tfs, rgb_plots, window_name)
+                rzr_loc, valid_pts = sc.find_red_block(xyz_tfs, rgb_plots, window_name)
                 if (valid_pts > 0) or (num_clouds >= 20): 
                     del razor_look_times                    
                     break
@@ -233,7 +233,7 @@ for s in range(SEGNUM):
                     xyz_tfs.append(needle_clouds[i][0].copy())
                     rgb_plots.append(needle_clouds[i][1].copy())              
                     
-                needle_loc, valid_pts = sc.find_needle_end(xyz_tfs, rgb_plots, window_name)
+                needle_loc, valid_pts = sc.find_red_block(xyz_tfs, rgb_plots, window_name)
                 if (valid_pts > 0) or (num_clouds >= 20): 
                     del needle_look_times                    
                     break
@@ -315,11 +315,7 @@ for s in range(SEGNUM):
             
             del needle_look_times
             del xyz_tfs
-            del rgb_plots  
-        
-        elif kp == 'none':
-            keypt_locs.append((0,0,0))
-            keypt_names.append('none')              
+            del rgb_plots               
             
         if yes_or_no('Key point %s saved for this segment. Is there another key point for this segment?'%kp):
             k += 1
