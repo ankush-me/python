@@ -338,8 +338,6 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, other_mani
 ###### Load demo from np files
 #######################################
 
-demo_keypts = np.load(osp.join(IROS_DATA_DIR, kpf + "/keypoints.npy"))
-
 def keyfunc(fname): 
     return int(osp.basename(fname).split("_")[0][3:]) # sort files with names like seg0_larm.npy
 
@@ -357,18 +355,7 @@ for s in range(SEGNUM):
 
     print "trajectory segment", str(s), "broken into %i mini-segment(s) by gripper transitions"%len(mini_segments[s])
 
-#raw_input("press enter to execute")
 #######################################
-
-### iterate through each 'look' segment; for each segment:
-### click on key points
-### compare to key points from demonstration, do registration, find warping function
-###     iterate through each mini-segment
-###     downsample
-###     find cartestian coordinates for trajectory
-###     transform cartestian trajectory according to warping function
-###     do ik to find new joint space trajectory (left arm first, then right arm)
-###     execute new trajectory
 
 listener = ru.get_tf_listener()
 handles = []
@@ -383,6 +370,9 @@ if args.segment_index > 0: #HACK so we can start in the middle
         demo_robot.Grab(demo_needle_tip)
 
 for s in range(args.segment_index, SEGNUM):
+    
+    demo_keypts = np.load(osp.join(IROS_DATA_DIR, kpf, 'seg%s_keypoints.npy'%s))
+    print 'demo_keypoints for this segment', demo_keypts    
   
     snapshot_count = 0
     while True:    
@@ -390,7 +380,7 @@ for s in range(args.segment_index, SEGNUM):
         keypt_names = segment_info["keypts_to_look_for"]
         num_kps = len(keypt_names)
         
-        print colorize("trajectory segment %i"%s, 'blue', bold=True, highlight=True)    
+        print colorize("Trajectory segment %i"%s, 'blue', bold=True, highlight=True)    
     
         # keep track of keypts seen during each segment
         exec_keypts[s] = {}
@@ -454,7 +444,7 @@ for s in range(args.segment_index, SEGNUM):
             keypt_locs = sc.get_kp_locations(keypt_names, args.cloud_topic)
             for (n, name) in enumerate(keypt_names): 
                 exec_keypts[s]["names"].append(keypt_names[n])
-                if np.isnan(np.asarray(keypt_locs[n])).all():
+                if (np.isnan(np.asarray(keypt_locs[n]))).all():
                     last_loc, found_seg = get_last_kp_loc(exec_keypts, keypt_names[n], s)
                     print "occluded key point %s found in segment %s at location %s"%(keypt_names[n], found_seg, last_loc)
                     keypt_locs[n] = last_loc
@@ -473,7 +463,7 @@ for s in range(args.segment_index, SEGNUM):
                          current_rgb = np.load("/tmp/rgb.npy"),
                          current_xyz = np.load("/tmp/xyz_tf.npy"),
                          keypts_names = keypt_names,
-                         demo_keypts = demo_keypts[s],
+                         demo_keypts = demo_keypts,
                          exec_keypts = exec_keypts[s]["locations"]
                          )
                 snapshot_count += 1
@@ -486,7 +476,7 @@ for s in range(args.segment_index, SEGNUM):
         else:
             break
                 
-    demopoints_m3 = np.array(demo_keypts[s])
+    demopoints_m3 = np.array(demo_keypts)
     newpoints_m3 = np.array(exec_keypts[s]["locations"])
     
     if args.mode in ["gazebo", "reality"]:

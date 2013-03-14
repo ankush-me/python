@@ -90,13 +90,13 @@ def get_kp_locations(kp_names, cloud_topic):
     if kp_names[0] == "tip_transform":         
         while True:
             xyz_tfs, rgb_plots = get_kp_clouds(listener, cloud_topic, 30)
-            needle_tip_loc = find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME)
+            needle_tip_loc = find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME, 'execute')
             if needle_tip_loc[2] > 1:   
                 return needle_tip_loc              
             else: 
                 print colorize("Didn't find a high enough point! Trying again","red", True, True)
         
-    elif kp_names[0] in ["needle_end", "razor"]:
+    elif kp_names[0] in ["needle_end", "stand", "razor"]:
         while True:
             xyz_tfs, rgb_plots = get_kp_clouds(listener, cloud_topic, 30)        
             kp_loc, pts = find_red_block(xyz_tfs, rgb_plots, WIN_NAME)
@@ -106,10 +106,10 @@ def get_kp_locations(kp_names, cloud_topic):
             else: 
                 print colorize("Couldn't find the keypoint! Trying again","red", True, True)             
     
-    elif kp_names[0] == "needle_tip":
+    elif kp_names[0] in ["needle_tip"]:
         while True:
             xyz_tfs, rgb_plots = get_kp_clouds(listener, cloud_topic, 30)
-            kp_loc = find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME)
+            kp_loc = find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME, 'execute')
             if kp_loc[2] > 0.8: 
                 seg_kps.append(kp_loc)
                 break                
@@ -164,56 +164,24 @@ def find_kp(kp, xyz_tf, rgb_plot, WIN_NAME):
     col_kp = gc.x
     row_kp = gc.y
     
-    win_idx = 0
-    xyz = []
-
     cv2.circle(rgb_plot, (col_kp, row_kp), 5, (0, 0, 255), -1)
     cv2.imshow(WIN_NAME, rgb_plot)    
-    cv2.waitKey(100)    
-
-    
+    cv2.waitKey(100)        
 
     for winsize in [1,3,9,27,51,153]:
         radius = winsize//2
         xyz_window = xyz_tf[row_kp-radius:row_kp+radius+1, col_kp-radius:col_kp+radius+1,:]
         if (xyz_window != -2).any():
-            if winsize > 1: print colorize("warning: clicked point was nan, so we used a %ix%i window"%(winsize,winsize), "magenta")
+            if winsize > 1: print colorize("Warning: clicked point was NaN, so we used a %ix%i window"%(winsize,winsize), "magenta")
             return np.median(xyz_window[xyz_window[:,:,2] != -2], axis=0)
     raise Exception("couldn't get window without nans")
-
-    #raise    
-    #x, y, z = xyz_tf[col_kp, row_kp]
-
-    #print 'np.asarray(x,y,z)', np.asarray(x,y,z)
-    
-    #if np.asarray(x,y,z) == -2.0:
-        #while True:
-            #print "got a NaN in the point cloud...expanding pixel window size"
-            #win_idx += 1        
-            
-            #xyz.extend(xyz_tf[(col_kp - win_idx):(col_kp + win_idx), (row_kp - win_idx):(row_kp + win_idx), :])
-            
-            #xyz_avg = np.median(xyz, axis=0) 
-            
-            #print 'new way xyz', xyz
-            #print 'new way xyz_avg', xyz_avg
-            
-            #if (xyz_avg==-2).any():
-                #print "still getting Nans, increasing window size more"
-                #continue
-            #else: 
-                #print '%s 3d location with pixel window size %s'%(kp, win_idx), xyz_avg
-                #return xyz_avg        
-    #else:
-        #print '%s 3d location'%kp, x, y, z
-        #return (x, y, z)
-    
+   
 
 
 #########################################
 ### find needle
 #########################################
-def find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME):
+def find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME, caller):
 
     ### clicking set-up 
     class GetClick:
@@ -281,15 +249,15 @@ def find_needle_tip(xyz_tfs, rgb_plots, WIN_NAME):
     max_needle.append(yneedle[ind])
     max_needle.append(zneedle[ind])
 
-    #cv2.circle(rgb_plots[ind], (col_needle[ind], row_needle[ind]), 3, (255, 0, 0), 2)
-    #cv2.imshow(WIN_NAME, rgb_plots[ind])
-    #cv2.waitKey(100)
-        
-
-    cv2.circle(rgb_plot, (col_needle[ind], row_needle[ind]), 3, (255, 0, 0), 2)
-    cv2.imshow(WIN_NAME, rgb_plot)
-    cv2.waitKey(100)    
-       
+    if caller == 'process':
+        cv2.circle(rgb_plots[ind], (col_needle[ind], row_needle[ind]), 3, (255, 0, 0), 2)
+        cv2.imshow(WIN_NAME, rgb_plots[ind])
+        cv2.waitKey(100)
+    else:    
+        cv2.circle(rgb_plot, (col_needle[ind], row_needle[ind]), 3, (255, 0, 0), 2)
+        cv2.imshow(WIN_NAME, rgb_plot)
+        cv2.waitKey(100)    
+           
     print 'needle tip 3d location', max_needle
 
     # plot the point cloud with a circle around "highest" point    
@@ -323,7 +291,7 @@ def find_red_block(xyz_tfs, rgbs, WIN_NAME):
     needle_rect_corners = []
     nc = len(xyz_tfs)
     rgb_plot = rgbs[0].copy()
-    print colorize("click at the corners of a rectangle which encompasses the end of the needle", 'red', bold=True)
+    print colorize("click at the corners of a rectangle which encompasses the red block", 'red', bold=True)
 
     for i in xrange(2):
         gc = GetClick()
@@ -370,6 +338,6 @@ def find_red_block(xyz_tfs, rgbs, WIN_NAME):
     
     xyz_avg = np.median(high_red_xyz, axis=0)     
 
-    print 'Needle end location', xyz_avg
+    print 'Keypoint location', xyz_avg
  
     return xyz_avg, valid_pts
