@@ -218,7 +218,6 @@ for (i_kp, (r,c)) in enumerate(rcs1):
     cv2.putText(rgb2_plot, str(i_kp), (cpredglobal,rpredglobal), cv2.FONT_HERSHEY_PLAIN, 1.0, YELLOW, thickness = 2)    
 
     
-    
 
 cv2.imshow("rgb1", rgb1_plot)
 cv2.waitKey(100)

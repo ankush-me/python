@@ -297,9 +297,9 @@ def correct_bag_errors(all_times):
     all_times = corrected_all_times; corrected_all_times = []
     print 'After ignoring extra look events:', actions_to_str(all_times)
 
-    start_times = [t for t, action in all_times if action == 'start']
-    stop_times = [t for t, action in all_times if action == 'stop']
-    look_times = [t for t, action in all_times if action == 'look']
+    start_times   = [t for t, action in all_times if action == 'start']
+    stop_times    = [t for t, action in all_times if action == 'stop']
+    look_times    = [t for t, action in all_times if action == 'look']
     l_close_times = [t for t, action in all_times if action == 'l_close']
     l_open_times = [t for t, action in all_times if action == 'l_open']
     r_close_times = [t for t, action in all_times if action == 'r_close']
@@ -335,9 +335,9 @@ def create_segments(bag, link_names):
     r_close = np.zeros(N, bool)
 
     times = kinematics_info["time"]
-    l_open[np.searchsorted(times, l_open_times)] = True
+    l_open[np.searchsorted(times, l_open_times)]   = True
     l_close[np.searchsorted(times, l_close_times)] = True
-    r_open[np.searchsorted(times, r_open_times)] = True
+    r_open[np.searchsorted(times, r_open_times)]   = True
     r_close[np.searchsorted(times, r_close_times)] = True
 
     kinematics_info["l_open"] = l_open
@@ -390,6 +390,7 @@ def create_segment_without_look(bag, link_names):
     times = kinematics_info["time"]
     start_inds = np.searchsorted(times, start_times)
     stop_inds = np.searchsorted(times, stop_times)
+Processing
 
     
     seg_infos = []
@@ -416,7 +417,7 @@ def determine_arms_used(segment):
     #l_gripper = segment["l_gripper_joint"]
     
     right_used = path_length(r_xyz) > .05 #or path_length(r_gripper) > .04
-    left_used = path_length(l_xyz) > .05 #or path_length(l_gripper) > .04
+    left_used = path_length(l_xyz)  > .05 #or path_length(l_gripper) > .04
     
     if right_used and not left_used: return "r"
     elif left_used and not right_used: return "l"

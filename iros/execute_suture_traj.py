@@ -63,7 +63,7 @@ if args.mode == "openrave":
     robot = env.GetRobots()[0]
     torso_joint = robot.GetJoint("torso_lift_joint")
     robot.SetDOFValues(torso_joint.GetLimits()[1], [torso_joint.GetDOFIndex()])
-    
+
 else:
     import rospy
     from brett2.PR2 import PR2
@@ -98,7 +98,6 @@ else:
     env.Load(osp.join(osp.dirname(lfd.__file__), "data/table2.xml"))
 
 #######################
-
 from collections import namedtuple
 TrajSegment = namedtuple("TrajSegment", "larm_traj rarm_traj lgrip_angle rgrip_angle") # class to describe trajectory segments
 
@@ -182,12 +181,14 @@ def adaptive_resample(x, tol, max_change=None, min_steps=3):
         else:
             l1 = np.union1d(l1, (l1[bi] + l1[bi+1]) / 2 )
 
-
     raise Exception("couldn't subdivide enough. something funny is going on. check your input data")
 
 
 def segment_trajectory(larm, rarm, lgrip, rgrip):
-
+    """
+    Segments the recorded trajectory at points where gripper angles change.
+    Further, it clamps the gripper angles to OPEN/CLOSED angle.
+    """
     thresh = .04 # open/close threshold
 
     n_steps = len(larm)
@@ -231,7 +232,15 @@ def segment_trajectory(larm, rarm, lgrip, rgrip):
     #return None
 
 def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, other_manip_name = None, other_manip_traj = None):
-
+    """
+    Constructs and solves a trajectory optimization problem.
+        robot      : openrave robot object in the openrave environment
+        manip_name : manipulator for the arm
+        ee_link    : openrave link object of the end-effector
+        new_hmats  : the orientations (4x4 matrices) to follow
+        old_traj   : the old joint angles [used for initialization]   
+    """
+    
     n_steps = len(new_hmats)
     assert old_traj.shape[0] == n_steps
     assert old_traj.shape[1] == 7

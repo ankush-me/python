@@ -115,7 +115,6 @@ SEGNUM = len(look_times)
 
 
 if yes_or_no('Do you want to extract kinematics info from bag file?'):
-    #raw_input("press enter to extract kinematics info from bag file")
 
     link_names = ["r_gripper_tool_frame", "l_gripper_tool_frame"]             
     kinematics_info = bp.extract_kinematics_from_bag(bag, link_names)    

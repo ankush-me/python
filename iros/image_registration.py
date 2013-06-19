@@ -125,22 +125,24 @@ def dp_match_ternary(xys_n, vs_n, src_xys_n):
     print "cost",cost
     return bestpath
 
-
+  
 def get_matches(src_img, xy, targ_img, patch_size = 25, max_deficit = .3, min_match_distance = 10, max_num_matches = 20):
     assert patch_size % 2 == 1
     patch_radius = patch_size // 2
     assert src_img.ndim == 3
     col_keypoint, row_keypoint = xy
 
+    # ensure that the point xy (row/col indices) in src_image such that there is a border of patch_radius 
     assert row_keypoint - patch_radius >= 0
     assert row_keypoint + patch_radius < src_img.shape[0]
     assert col_keypoint - patch_radius >= 0
     assert col_keypoint + patch_radius < src_img.shape[1]
     
-    
-    patch = src_img[row_keypoint-patch_radius:row_keypoint+patch_radius+1, 
+    #extract a patch around xy
+    patch   = src_img[row_keypoint-patch_radius:row_keypoint+patch_radius+1, 
                       col_keypoint-patch_radius:col_keypoint+patch_radius+1, :]
     
+    # do template matching using opencv
     heatmap = cv2.matchTemplate(targ_img, patch, cv2.TM_CCOEFF_NORMED)
     
     sorted_heatmap_values = np.sort(heatmap.flatten())
