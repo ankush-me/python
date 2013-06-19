@@ -1,12 +1,13 @@
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("mode", choices=["openrave", "gazebo", "reality"])
-parser.add_argument("--cloud_topic", default="/camera/depth_registered/points")
 parser.add_argument("task")
-parser.add_argument("part_index",type=int)
+parser.add_argument("part_index", type=int)
+parser.add_argument("--cloud_topic", default="/camera/depth_registered/points")
 parser.add_argument("--segment_index", type=int, default=0)
-parser.add_argument("--interactive",action="store_true")
-parser.add_argument("--no_movement",action="store_true")
+parser.add_argument("--interactive", action="store_true")
+parser.add_argument("--no_movement", action="store_true")
+parser.add_argument("--gather_data", action="store_true", default=False)
 args = parser.parse_args()
 
 import numpy as np
@@ -221,6 +222,28 @@ def segment_trajectory(larm, rarm, lgrip, rgrip):
 
     return traj_segments
                    
+def get_last_kp_loc(exec_keypts, desired_keypt, current_seg):        
+    
+    search_seg = current_seg - 1
+       
+    while(True):
+        if search_seg < 0:
+            print "Reached beginning of execution and couldn't find desired keypoint! Aborting..."
+            sys.exit(1)            
+        else:
+            search_seg_names = exec_keypts[search_seg]["names"]
+            search_seg_locs = exec_keypts[search_seg]["locations"]
+        
+            for k in range(len(search_seg_names)):
+                if search_seg_names[k] == desired_keypt:
+                    kp_loc = search_seg_locs[k]
+                    kp_found = True
+            
+        if kp_found:        
+            return kp_loc, search_seg
+        else:
+            search_seg -= 1
+
 
 #def GetLinkMaybeAttached(robot,ee_link):
     #link = robot.GetLink(ee_link)
@@ -265,7 +288,7 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, other_mani
         },
         {
             "type" : "collision",
-            "params" : {"coeffs" : [10],"dist_pen" : [0.005]}
+            "params" : {"coeffs" : [50],"dist_pen" : [0.01]}
         }                
         ],
         "constraints" : [
@@ -288,8 +311,8 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, other_mani
                 "wxyz":pose[0:4].tolist(),
                 "link":ee_linkname,
                 "timestep":i_step,
-                "pos_coeffs":[15,15,15],
-                "rot_coeff":[0,0,0]
+                "pos_coeffs":[10,10,10],
+                "rot_coeff":[.3,.3,.3]
              }
             })
         if other_manip_name is not None:
@@ -324,8 +347,6 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj, other_mani
 ###### Load demo from np files
 #######################################
 
-demo_keypts = np.load(osp.join(IROS_DATA_DIR, kpf + "/keypoints.npy"))
-
 def keyfunc(fname): 
     return int(osp.basename(fname).split("_")[0][3:]) # sort files with names like seg0_larm.npy
 
@@ -343,18 +364,7 @@ for s in range(SEGNUM):
 
     print "trajectory segment", str(s), "broken into %i mini-segment(s) by gripper transitions"%len(mini_segments[s])
 
-#raw_input("press enter to execute")
 #######################################
-
-### iterate through each 'look' segment; for each segment:
-### click on key points
-### compare to key points from demonstration, do registration, find warping function
-###     iterate through each mini-segment
-###     downsample
-###     find cartestian coordinates for trajectory
-###     transform cartestian trajectory according to warping function
-###     do ik to find new joint space trajectory (left arm first, then right arm)
-###     execute new trajectory
 
 listener = ru.get_tf_listener()
 handles = []
@@ -369,6 +379,9 @@ if args.segment_index > 0: #HACK so we can start in the middle
         demo_robot.Grab(demo_needle_tip)
 
 for s in range(args.segment_index, SEGNUM):
+    
+    demo_keypts = np.load(osp.join(IROS_DATA_DIR, kpf, 'seg%s_keypoints.npy'%s))
+    print 'demo_keypoints for this segment', demo_keypts    
   
     snapshot_count = 0
     while True:    
@@ -376,7 +389,7 @@ for s in range(args.segment_index, SEGNUM):
         keypt_names = segment_info["keypts_to_look_for"]
         num_kps = len(keypt_names)
         
-        print colorize("trajectory segment %i"%s, 'blue', bold=True, highlight=True)    
+        print colorize("Trajectory segment %i"%s, 'blue', bold=True, highlight=True)    
     
         # keep track of keypts seen during each segment
         exec_keypts[s] = {}
@@ -413,7 +426,7 @@ for s in range(args.segment_index, SEGNUM):
                     
         if keypt_names[0] == 'tip_transform': # this is segment where robot looks for tip
             demo_needle_tip_loc = np.load(osp.join(IROS_DATA_DIR, kpf, "seg%s_needle_world_loc.npy"%s))
-            exec_needle_tip_loc = sc.get_kp_locations(keypt_names, exec_keypts, s, args.cloud_topic)
+            exec_needle_tip_loc = sc.get_kp_locations(keypt_names, args.cloud_topic)
                 
             exec_keypts[s]["locations"].append((0, 0, 0))
                                 
@@ -437,34 +450,42 @@ for s in range(args.segment_index, SEGNUM):
                     grab_needle_tip('r') 
                                    
         else:
-            keypt_locs = sc.get_kp_locations(keypt_names, exec_keypts, s, args.cloud_topic)
-            exec_keypts[s]["locations"] = keypt_locs
-                                
-        for (n, name) in enumerate(keypt_names): exec_keypts[s]["names"].append(keypt_names[n]) 
+            keypt_locs = sc.get_kp_locations(keypt_names, args.cloud_topic)
+            for (n, name) in enumerate(keypt_names): 
+                exec_keypts[s]["names"].append(keypt_names[n])
+                if (np.isnan(np.asarray(keypt_locs[n]))).all():
+                    last_loc, found_seg = get_last_kp_loc(exec_keypts, keypt_names[n], s)
+                    print "occluded key point %s found in segment %s at location %s"%(keypt_names[n], found_seg, last_loc)
+                    keypt_locs[n] = last_loc
+            
+            exec_keypts[s]["locations"] = keypt_locs                                
+               
+        if args.gather_data:
+            rgbfile = glob(osp.join(IROS_DATA_DIR, args.task, 'point_clouds', 'pt%i/seg%i_*_rgb_*.npy'%(PARTNUM, s)))[0]
+            xyzfile = glob(osp.join(IROS_DATA_DIR, args.task, 'point_clouds', 'pt%i/seg%i_*_xyz_tf*.npy'%(PARTNUM, s)))[0]                
         
-        rgbfile = glob(osp.join(IROS_DATA_DIR, args.task, 'point_clouds', 'pt%i/seg%i_*_rgb_*.npy'%(PARTNUM, s)))[0]
-        xyzfile = glob(osp.join(IROS_DATA_DIR, args.task, 'point_clouds', 'pt%i/seg%i_*_xyz_tf*.npy'%(PARTNUM, s)))[0]                
-    
-        if keypt_names[0] not in [ "needle_end", "needle_tip", "razor", "tip_transform"]:
-            np.savez(osp.join(IROS_DATA_DIR, "segment%.2i_snapshot%.2i_time%i"%(s,snapshot_count,int(time.time()))),
-                     demo_rgb = np.load(rgbfile),
-                     demo_xyz = np.load(xyzfile),
-                     current_rgb = np.load("/tmp/rgb.npy"),
-                     current_xyz = np.load("/tmp/xyz_tf.npy"),
-                     keypts_names = keypt_names,
-                     demo_keypts = demo_keypts[s],
-                     exec_keypts = exec_keypts[s]["locations"]
-                     )
-            snapshot_count += 1
-            if yes_or_no("done with snapshots?"):
-                print colorize("going on to next segment","red")
+            if keypt_names[0] not in [ "needle_end", "needle_tip", "razor", "tip_transform"]:
+                print colorize("acquiring a snapshot...", "blue")
+                np.savez(osp.join(IROS_DATA_DIR, "segment%.2i_snapshot%.2i_time%i"%(s,snapshot_count,int(time.time()))),
+                         demo_rgb = np.load(rgbfile),
+                         demo_xyz = np.load(xyzfile),
+                         current_rgb = np.load("/tmp/rgb.npy"),
+                         current_xyz = np.load("/tmp/xyz_tf.npy"),
+                         keypts_names = keypt_names,
+                         demo_keypts = demo_keypts,
+                         exec_keypts = exec_keypts[s]["locations"]
+                         )
+                snapshot_count += 1
+                if yes_or_no("done with snapshots?"):
+                    print colorize("going on to next segment","red")
+                    break
+            else:
+                print colorize("this segment doesn't have image keypoints. moving on","red")
                 break
         else:
-            print colorize("this segment doesn't have image keypoints. moving on","red")
             break
-        print colorize("acquiring another snapshot", "blue")
-            
-    demopoints_m3 = np.array(demo_keypts[s])
+                
+    demopoints_m3 = np.array(demo_keypts)
     newpoints_m3 = np.array(exec_keypts[s]["locations"])
     
     if args.mode in ["gazebo", "reality"]:
@@ -474,16 +495,18 @@ for s in range(args.segment_index, SEGNUM):
         pose_array = conversions.array_to_pose_array(newpoints_m3, 'base_footprint')    
         handles.append(rviz.draw_curve(pose_array, rgba = (0,0,1,1),width=.02,type=ru.Marker.CUBE_LIST))
 
-    from lfd import registration
-    f = registration.ThinPlateSpline()
+    #from lfd import registration
+    #f = registration.ThinPlateSpline()
     #f.fit(demopoints_m3, newpoints_m3, 10,10)
-    f.fit(demopoints_m3, newpoints_m3, bend_coef=10,rot_coef=.01)
+    #f.fit(demopoints_m3, newpoints_m3, bend_coef=10,rot_coef=.01)
+    
+    import iros_tps
+    f = iros_tps.fit(demopoints_m3, newpoints_m3)
     np.set_printoptions(precision=3)
     print "nonlinear part", f.w_ng
     print "affine part", f.lin_ag
     print "translation part", f.trans_g
     print "residual", f.transform_points(demopoints_m3) - newpoints_m3
-
 
     for (i, mini_segment) in enumerate(mini_segments[s]):
 

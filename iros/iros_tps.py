@@ -5,8 +5,12 @@ from glob import glob
 import lfd.tps as tps
 from jds_utils.colorize import colorize
 from lfd import fastmath, registration
+
 import iros.image_registration as ir
 
+testdata_dir = osp.join(os.getenv("IROS_DATA_DIR"), "testdata")
+fnames = glob(osp.join(testdata_dir,"segment*.npz"))
+np.set_printoptions(precision=3)
 
 PLOT = False
 
@@ -18,7 +22,6 @@ def axisanglepart(m):
     axis =  (1/(2*np.sin(theta))) * np.array([[rotpart[2,1] - rotpart[1,2], rotpart[0,2]-rotpart[2,0], rotpart[1,0]-rotpart[0,1]]])
     return theta, axis
 
-
     
 def fit(demo_keypts, current_keypts):    
     rot_coefs = .01*np.array((0.01,0.01,0.0025))
@@ -29,6 +32,7 @@ def fit(demo_keypts, current_keypts):
     #spline.fit(demo_keypts, current_keypts,bend_coef=10,rot_coef=.1)
     print "-----------------------------"
     print "dataset %i"%i
+
     centertrans_g = tps.tps_eval([demo_keypts.mean(axis=0)], lin_ag, trans_g, w_ng, demo_keypts)[0]-demo_keypts.mean(axis=0)
     print "translation of center:\n", centertrans_g
     print "linear:\n",lin_ag
@@ -73,12 +77,6 @@ def test_fitting():
     testdata_dir = osp.join(os.getenv("IROS_DATA_DIR"), "testdata")
     fnames = glob(osp.join(testdata_dir,"segment*.npz"))
     np.set_printoptions(precision=3)    
-
-    for (i,fname) in enumerate(fnames):
-        f = np.load(fname)
-        (current_xyz, current_rgb, current_keypts,demo_xyz, demo_rgb, demo_keypts) = \
-            [f[key] for key in ["current_xyz", "current_rgb", "exec_keypts", "demo_xyz", "demo_rgb", "demo_keypts"]]
-        f = fit(demo_keypts, current_keypts)
 
 def test_keypoint_matching():
     iros_data_dir = osp.join(os.getenv("IROS_DATA_DIR"))
