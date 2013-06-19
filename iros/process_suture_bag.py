@@ -4,8 +4,8 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("task")
 parser.add_argument("part_index",type=int)
-parser.add_argument("--segment_index", type=int, default=0)
 args = parser.parse_args()
+
 
 import lfd
 import iros
@@ -22,37 +22,34 @@ import h5py
 import numpy as np
 import cv2
 import simple_clicker as sc
+#import feature_utils as fu
 
 # find data files, files to save to
+SAVE_TRAJ = False
 IROS_DATA_DIR = os.getenv("IROS_DATA_DIR")
-IROS_DIR = osp.dirname(iros.__file__)
 
-task_file = osp.join(IROS_DIR, "suture_demos2.yaml")
+task_file = osp.join(IROS_DATA_DIR, "suture_demos.yaml")
 
-with open(osp.join(IROS_DIR, task_file),"r") as fh:
+with open(osp.join(IROS_DATA_DIR,task_file),"r") as fh:
     task_info = yaml.load(fh)
 
-bag = task_info[args.task][args.part_index]["demo_bag"]
-#bag = "/mnt/storage/mtayfred/data/bags2/2loopknotseg3.bag"
+#bag = task_info[args.task][args.part_index]["demo_bag"]
+bag = '/mnt/storage/mtayfred/data/bags/pierce_w_startstopseg7.bag'
 bag = rosbag.Bag(bag)
 
-jtf = osp.join(IROS_DATA_DIR, args.task, 'joint_trajectories', 'pt' + str(args.part_index))
-kpf = osp.join(IROS_DATA_DIR, args.task, 'keypoints', 'pt' + str(args.part_index))
-pcf = osp.join(IROS_DATA_DIR, args.task, 'point_clouds', 'pt' + str(args.part_index))
-
-#jtf = osp.join(IROS_DATA_DIR, args.task, 'temp_joint_trajectories', 'pt' + str(args.part_index))
-#kpf = osp.join(IROS_DATA_DIR, args.task, 'temp_keypoints', 'pt' + str(args.part_index))
-#pcf = osp.join(IROS_DATA_DIR, args.task, 'temp_point_clouds', 'pt' + str(args.part_index))
+jtf = osp.join(IROS_DATA_DIR, 'joint_trajectories', args.task, 'pt' + str(args.part_index))
+kpf = osp.join(IROS_DATA_DIR, 'key_points', args.task, 'pt' + str(args.part_index))
+pcf = osp.join(IROS_DATA_DIR, 'point_clouds', args.task, 'pt' + str(args.part_index))
 
 ### extract kinematics info from bag
 def extract_kinematics(np_file, info):
     
     for i in range(len(info)):
-        savefile = np_file + '/seg%s'%i
-        print 'Writing to', np_file
+        savefile = np_file + 'seg%s'%i
+        print 'Writing to', savefile
 
         if osp.exists(savefile + '_larm.npy'):
-            if yes_or_no('/seg%s already exists. Overwrite?'%i):
+            if yes_or_no(savefile + ' already exists. Overwrite?'):
                 os.remove(savefile + '_larm.npy')
                 os.remove(savefile + '_rarm.npy')
                 os.remove(savefile + '_lgrip.npy')
@@ -71,7 +68,7 @@ def extract_kinematics(np_file, info):
         np.save(savefile + '_lgrip.npy' , np.array(lgrip))
         np.save(savefile + '_rgrip.npy' , np.array(rgrip))
 
-    print 'Saved all trajectories for %i segments'%i
+    print 'saved all'
     
        
 # creates the text for the yaml file for the demo
@@ -105,32 +102,6 @@ def add_new_entry_to_yaml_file(data_dir, new_entry_text):
     demofile.flush()
     os.fsync(demofile.fileno())
     demofile.close()
-    
-    
-def get_last_kp_loc(all_past_keypts, desired_keypt, current_seg):        
-    
-    search_seg = current_seg - 1
-       
-    while(True):
-        if search_seg < 0:
-            print "Reached beginning of execution and couldn't find desired keypoint! Aborting..."
-            sys.exit(1)            
-        else:
-            search_seg_names = all_past_keypts[search_seg]["names"]
-            search_seg_locs = all_past_keypts[search_seg]["locations"]
-        
-            for k in range(len(search_seg_names)):
-                if search_seg_names[k] == desired_keypt:
-                    kp_loc = search_seg_locs[k]
-                    kp_found = True
-            
-        if kp_found:        
-            return kp_loc, search_seg
-        else:
-            search_seg -= 1
-            
-            
-#######################################
 
 print 'getting bag info...'
 
@@ -143,7 +114,10 @@ look_times = [t for t, action in all_times if action == 'look']
 assert len(start_times) == len(stop_times)
 SEGNUM = len(look_times)
 
-if yes_or_no(colorize('Do you want to extract kinematics info from bag file?', 'blue')):
+
+if SAVE_TRAJ == True:
+    raw_input("press enter to extract kinematics info from bag file")
+
     link_names = ["r_gripper_tool_frame", "l_gripper_tool_frame"]             
     kinematics_info = bp.extract_kinematics_from_bag(bag, link_names)    
     times = kinematics_info["time"]
@@ -158,188 +132,151 @@ if yes_or_no(colorize('Do you want to extract kinematics info from bag file?', '
     
     extract_kinematics(jtf, forced_segs_info)         
 
-    raw_input("Extracted segments. Press enter to continue")   
-
-window_name = "Find Keypoints"
-keypt_list = ['lh', 'rh', 'tc', 'mc', 'bc', 'ne', 'nt', 'ntt', 'stand', 'rzr']
-demo_keypts = {}   
-
-sstart = args.segment_index
+    raw_input("extracted segments. press enter to continue")
 
 # determine which keypoints matter for each segment based on user input
-print 'Extracting look_time point clouds...'
+print 'getting all look_time point clouds...'
 look_clouds = bp.get_transformed_clouds(bag, look_times)
 
-for s in range(sstart, SEGNUM):
-    print colorize('look time for segment %s'%s, 'blue', bold=True, highlight=True)
+window_name = "Find Keypoints"
+keypt_list = ['lh','rh','ct', 'ne', 'nt', 'ntt']
+keypoints_locations = []
+keypoints_names = []
 
-    demo_keypts[s] = {}
-    demo_keypts[s]["names"] = []
-    demo_keypts[s]["locations"] = []    
-    
-    k = 0
+for s in range(SEGNUM):
+    print 'look time for segment %s'%s
+    keypt_names = []
+    keypt_locs = []
 
     while (True):
         sc.show_pointclouds(look_clouds[s], window_name)
-        kp = raw_input("Which key points are important for this segment? choices are: %s. (please only enter one key point at a time): "%str(keypt_list))
+        kp = raw_input("which key points are important for this segment? choices are: " + str(keypt_list) + ". (please only enter one key point at a time): ")
         
         if kp not in keypt_list:
-            print 'Incorrect input. Try again!'
+            print 'incorrect input. try again!'
             continue  
                  
-        elif kp in ['lh', 'rh', 'bc', 'mc', 'tc']:
-            if kp == 'lh': demo_keypts[s]["names"].append('left_hole')
-            elif kp == 'rh': demo_keypts[s]["names"].append('right_hole')
-            elif kp == 'bc': demo_keypts[s]["names"].append('bot_cut')
-            elif kp == 'mc': demo_keypts[s]["names"].append('mid_cut')
-            elif kp == 'tc': demo_keypts[s]["names"].append('top_cut')            
-
-            print colorize("Looking for %s..."%demo_keypts[s]["names"][k], 'green', bold=True)
+        elif kp == 'lh':
+            print colorize("Looking for Left Hole...", 'green', bold=True)
             
             xyz_tf = look_clouds[s][0].copy()
             rgb_plot = look_clouds[s][1].copy()
-            
-            if k < 1:
-                np.save(osp.join(pcf, 'seg%s_xyz_tf.npy'%s), xyz_tf)
-                np.save(osp.join(pcf, 'seg%s_rgb_pl.npy'%s), rgb_plot)            
+            xyz_tf[np.isnan(xyz_tf)] = -2 
+            np.save(pcf + 'seg%s_lh_xyz_tf.npy'%s, xyz_tf)
+            np.save(pcf + 'seg%s_lh_rgb_pl.npy'%s, rgb_plot)
 
-            kp_loc = sc.find_kp(demo_keypts[s]["names"][k], xyz_tf, rgb_plot, window_name)
+            hole_loc = sc.find_hole('left_hole', xyz_tf, rgb_plot, window_name)
+            keypt_locs.append(hole_loc) 
+            keypt_names.append('left_hole')
+  
+        elif kp == 'rh':
+            print colorize("Looking for Right Hole...", 'green', bold=True)
             
-            if (np.isnan(np.asarray(kp_loc))).all():
-                last_loc, found_seg = get_last_kp_loc(demo_keypts, demo_keypts[s]["names"][k], s)
-                print "occluded key point %s found in segment %s at location %s"%(demo_keypts[s]["names"][k], found_seg, last_loc)
-                kp_loc = last_loc            
-                                                          
-
-        elif kp in ['stand', 'rzr', 'ne']:
-            xyz_tfs = []
-            rgb_plots = []          
-            num_clouds = 10
-            
-            if kp == 'ne': demo_keypts[s]["names"].append('needle_end') 
-            elif kp == 'rzr': demo_keypts[s]["names"].append('razor') 
-            elif kp == 'stand': demo_keypts[s]["names"].append('needle_stand')            
-            
-            while True:
-                kp_look_times = []  
-                
-                print colorize("Looking for %s using High Red Block..."%demo_keypts[s]["names"][k], 'green', bold=True)          
-                print 'getting %s point clouds...'%num_clouds                
-
-                for t in range(num_clouds):
-                    kp_look_times.append(look_times[s] + t)
-                    
-                kp_clouds = bp.get_transformed_clouds(bag, kp_look_times)
+            xyz_tf = look_clouds[s][0].copy()
+            rgb_plot = look_clouds[s][1].copy()
+            xyz_tf[np.isnan(xyz_tf)] = -2 
+            np.save(pcf + 'seg%s_rh_xyz_tf.npy'%s, xyz_tf)
+            np.save(pcf + 'seg%s_rh_rgb_pl.npy'%s, rgb_plot)
     
-                for i in range(num_clouds):
-                    xyz_tfs.append(kp_clouds[i][0].copy())
-                    rgb_plots.append(kp_clouds[i][1].copy())
-                
-                if k < 1:    
-                    np.save(osp.join(pcf, 'seg%s_xyz_tfs.npy'%s), xyz_tfs)
-                    np.save(osp.join(pcf, 'seg%s_rgb_pls.npy'%s), rgb_plots)                
-                    
-                kp_loc, valid_pts = sc.find_red_block(xyz_tfs, rgb_plots, window_name)
-                del kp_look_times
-                if (valid_pts > 0) or (num_clouds >= 20):                                       
-                    break
-                else: 
-                    print colorize("Couldn't find the keypoint! Trying again with more point clouds", "red", True, True)
-                    num_clouds += 5
+            hole_loc = sc.find_hole('right_hole', xyz_tf, rgb_plot, window_name)
+            keypt_locs.append(hole_loc) 
+            keypt_names.append('right_hole')
             
-            del xyz_tfs
-            del rgb_plots            
+        elif kp == 'ct':
+            print colorize("Looking for Cut...", 'green', bold=True)
             
-        elif kp == 'nt':
-            xyz_tfs = []
-            rgb_plots = []            
-            num_clouds = 10
-            
-            demo_keypts[s]["names"].append('needle_tip')
-
-            while(True):
-                needle_look_times = []
-                
-                print colorize("Looking for Needle Tip...", 'green', bold=True)          
-                print 'getting %s needle point clouds...'%num_clouds             
-                
-                for t in range(num_clouds):
-                    needle_look_times.append(look_times[s] + t)
-                              
-                needle_clouds = bp.get_transformed_clouds(bag, needle_look_times)
+            xyz_tf = look_clouds[s][0].copy()
+            rgb_plot = look_clouds[s][1].copy()
+            xyz_tf[np.isnan(xyz_tf)] = -2 
+            np.save(pcf + 'seg%s_ct_xyz_tf.npy'%s, xyz_tf)
+            np.save(pcf + 'seg%s_ct_rgb_pl.npy'%s, rgb_plot)
     
-                for i in range(num_clouds):
-                    xyz_tfs.append(needle_clouds[i][0].copy())
-                    rgb_plots.append(needle_clouds[i][1].copy())
-                
-                if k < 1:
-                    np.save(osp.join(pcf, 'seg%s_xyz_tfs.npy'%s), xyz_tfs)
-                    np.save(osp.join(pcf, 'seg%s_rgb_pls.npy'%s), rgb_plots)                 
-                
-                kp_loc = sc.find_needle_tip(xyz_tfs, rgb_plots, window_name, 'process')
-                if yes_or_no("Is this a good point?"):
-                    break
-                else:
-                    del needle_look_times
-                    num_clouds += 5
-                    print ("Trying again with more point clouds.")                                                                        
+            tcut_loc, mcut_loc, bcut_loc = sc.find_cut(xyz_tf, rgb_plot, window_name)
+            keypt_locs.append(tcut_loc)
+            keypt_locs.append(mcut_loc)
+            keypt_locs.append(bcut_loc)
+            keypt_names.append('cut')       
             
-            del xyz_tfs
-            del rgb_plots  
-
-        elif kp == 'ntt':
+        elif kp == 'ne':
             xyz_tfs = []
             rgb_plots = []
             needle_look_times = []            
-            num_clouds = 10
+            num_clouds = 15
             
-            demo_keypts[s]["names"].append('tip_transform')
-            kp_loc = ((0,0,0))
-            
-            print colorize("Looking for Needle Tip...", 'green', bold=True)          
+            for t in range(num_clouds):
+                needle_look_times.append(look_times[s] + t)
+                
+            print colorize("Looking for Needle End...", 'green', bold=True)          
+            print 'getting the needle point clouds...'
+            needle_clouds = bp.get_transformed_clouds(bag, needle_look_times)
 
-            while True:
-                print 'getting %s needle point clouds...'%num_clouds              
+            for i in range(num_clouds):
+                xyz_tfs.append(needle_clouds[i][0].copy())
+                rgb_plots.append(needle_clouds[i][1].copy())
+                xyz_tfs[i][np.isnan(xyz_tfs[i])] = -2 
+            np.save(pcf + 'seg%s_ne_xyz_tfs.npy'%s, xyz_tfs)
+            np.save(pcf + 'seg%s_ne_rgb_pls.npy'%s, rgb_plots)                
                 
-                for t in range(num_clouds):
-                    needle_look_times.append(look_times[s] + t)
-                             
-                needle_clouds = bp.get_transformed_clouds(bag, needle_look_times)
-    
-                for i in range(num_clouds):
-                    xyz_tfs.append(needle_clouds[i][0].copy())
-                    rgb_plots.append(needle_clouds[i][1].copy())
-                    
-                if k < 1:                
-                    np.save(osp.join(pcf, 'seg%s_xyz_tfs.npy'%s), xyz_tfs)
-                    np.save(osp.join(pcf, 'seg%s_rgb_pls.npy'%s), rgb_plots)                 
-                    
-                needle_loc = sc.find_needle_tip(xyz_tfs, rgb_plots, window_name, 'process')
-                
-                if yes_or_no("Is this a good point?"):
-                    break
-                else:
-                    del needle_look_times
-                    num_clouds += 5
-                    print ("Trying again with more point clouds.")            
-                                              
-            np.save(osp.join(kpf, 'seg%s_needle_world_loc.npy'%s), needle_loc)                                     
+            needle_loc = sc.find_needle_end(xyz_tfs, rgb_plots, window_name)
             
+            keypt_locs.append(needle_loc)
+            keypt_names.append('needle_end')            
+            
+            del needle_look_times
             del xyz_tfs
-            del rgb_plots 
+            del rgb_plots
             
-        demo_keypts[s]["locations"].append(kp_loc)
+        elif kp in ['nt', 'ntt']:
+            xyz_tfs = []
+            rgb_plots = []
+            needle_look_times = []            
+            num_clouds = 15
             
-        if yes_or_no("Is there another key point for this segment?"):
-            k += 1
+            for t in range(num_clouds):
+                needle_look_times.append(look_times[s] + t)
+                
+            print colorize("Looking for Needle Tip...", 'green', bold=True)          
+            print 'getting the needle point clouds...'
+            needle_clouds = bp.get_transformed_clouds(bag, needle_look_times)
+
+            for i in range(num_clouds):
+                xyz_tfs.append(needle_clouds[i][0].copy())
+                rgb_plots.append(needle_clouds[i][1].copy())
+                xyz_tfs[i][np.isnan(xyz_tfs[i])] = -2 
+                
+            needle_loc = sc.find_needle_tip(xyz_tfs, rgb_plots, window_name)
+            
+            if kp == 'nt':
+                keypt_locs.append(needle_loc)
+                keypt_names.append('needle_tip')      
+                np.save(pcf + 'seg%s_nt_xyz_tfs.npy'%s, xyz_tfs)
+                np.save(pcf + 'seg%s_nt_rgb_pls.npy'%s, rgb_plots)                             
+            else:
+                keypt_locs.append((0,0,0))
+                keypt_names.append('empty')                
+                np.save(kpf + '_needle_world_loc.npy', needle_loc)
+                np.save(pcf + 'seg%s_ntt_xyz_tfs.npy'%s, xyz_tfs)
+                np.save(pcf + 'seg%s_ntt_rgb_pls.npy'%s, rgb_plots)                             
+            
+            del needle_look_times
+            del xyz_tfs
+            del rgb_plots                  
+            
+        if yes_or_no('Key point %s saved for this segment. Is there another key point for this segment?'%kp):
             continue    
         else:
-            np.save(osp.join(kpf, 'seg%s_keypoints.npy'%s), demo_keypts[s]["locations"])
-            np.save(osp.join(kpf, 'seg%s_keypoints_names.npy'%s), demo_keypts[s]["names"])
-            print "Keypoint(s): %s saved to file."%demo_keypts[s]["names"]
+            keypoints_locations.append(keypt_locs)
+            keypoints_names.append(keypt_names)
+            print 'keypoints_names', keypoints_names
+            del keypt_locs
+            del keypt_names
             break
             
   
+raw_input("Finished processing point clouds. Press enter to save key points to numpy file")
+np.save(kpf + '_keypoints.npy', keypoints_locations)
+np.save(kpf + '_keypoints_names.npy', keypoints_names)
+
 
 #raw_input("press enter to add new entry to yaml file")
 

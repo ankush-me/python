@@ -151,9 +151,6 @@ xyzfile2 = glob(osp.join(IROS_DATA_DIR, 'point_clouds', task2, 'pt%iseg%i_*_xyz_
 kpf1 = osp.join(IROS_DATA_DIR, 'key_points', task1)
 kpf2 = osp.join(IROS_DATA_DIR, 'key_points', task2)
 
-#xyz1, rgb1 = load_xyzrgb("suture_scene0.pcd")
-#xyz2, rgb2 = load_xyzrgb("suture_scene1.pcd")
-
 rgb1 = np.load(pcf1)
 rgb2 = np.load(pcf2)
 xyz1 = np.load(xyzfile1)
@@ -217,6 +214,7 @@ for (i_kp, (r,c)) in enumerate(rcs1):
     cpredglobal, rpredglobal = pred_rcs2[i_kp]
     cv2.putText(rgb2_plot, str(i_kp), (cpredglobal,rpredglobal), cv2.FONT_HERSHEY_PLAIN, 1.0, YELLOW, thickness = 2)    
 
+    
     
 
 cv2.imshow("rgb1", rgb1_plot)
