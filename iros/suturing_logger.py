@@ -67,5 +67,5 @@ def log (seg_info, pos_errs, traj_res):
                          'segments_info' : segments_info}
         print suturing_info
         info_file = open(save_path, 'wb')
-        cPickle.dumps(suturing_info, info_file, protocol=2)
+        cPickle.dump(suturing_info, info_file, protocol=2)
         
