@@ -5,6 +5,8 @@ import trajoptpy
 import openravepy
 import json
 
+import suturing_logger
+
 
 def transform_hmats(f, hmats):
     hmats = np.array(hmats)
@@ -151,7 +153,7 @@ def plan_follow_traj(robot, manip_name, link_name, new_hmats, old_traj, other_ma
     return traj
 
 
-def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new_hmats2, old_traj, other_manip_name = None, other_manip_traj = None):
+def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new_hmats2, old_traj, segment_info=None, other_manip_name = None, other_manip_traj = None):
 
     #for i in xrange(len(new_hmats1)):
     #    new_hmats1[i,:3,:3] = new_hmats1[i,:3,:3].T
@@ -206,8 +208,8 @@ def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new
 
     #trajoptpy.SetInteractive(True)
 
-    poses = [openravepy.poseFromMatrix(hmat) for hmat in new_hmats1]
-    for (i_step,pose) in enumerate(poses):
+    poses1 = [openravepy.poseFromMatrix(hmat) for hmat in new_hmats1]
+    for (i_step,pose) in enumerate(poses1):
         request["costs"].append(
             {"type":"pose",
              "params":{
@@ -224,8 +226,8 @@ def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new
                 {"timestep": i_step, "obj_states": [{"name": "ravens", "dof_vals":other_manip_traj[i_step], "dof_inds":other_dof_inds}] })
 
 
-    poses = [openravepy.poseFromMatrix(hmat) for hmat in new_hmats2]
-    for (i_step,pose) in enumerate(poses):
+    poses2 = [openravepy.poseFromMatrix(hmat) for hmat in new_hmats2]
+    for (i_step,pose) in enumerate(poses2):
         request["costs"].append(
             {"type":"pose",
              "params":{
@@ -243,5 +245,30 @@ def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new
     prob = trajoptpy.ConstructProblem(s, env) # create object that stores optimization problem
     trajoptpy.GetCollisionChecker(robot.GetEnv()).SetContactDistance(.001)
     result = trajoptpy.OptimizeProblem(prob)  # do optimization
-    traj = result.GetTraj()    
+    traj = result.GetTraj()
+
+
+    # calculate the position errors at each time-step in the segment:
+    saver = openravepy.RobotStateSaver(robot)
+    arm_inds = robot.GetManipulator(manip_name).GetArmIndices()
+    link1 = robot.GetLink(link1_name)
+    link2 = robot.GetLink(link2_name)
+    pos_errs1 = []
+    pos_errs2 = []
+    for i_step in xrange(1,n_steps):
+        row = traj[i_step]
+        robot.SetDOFValues(row, arm_inds)
+        tf1 = link1.GetTransform()
+        tf2 = link2.GetTransform()
+        pos1, pos2 = tf1[:3,3], tf2[:3,3]
+        pos_err1 = np.linalg.norm(poses1[i_step][4:7] - pos1)
+        pos_err2 = np.linalg.norm(poses2[i_step][4:7] - pos2)
+        pos_errs1.append(pos_err1)
+        pos_errs2.append(pos_err2)
+
+    pos_errs = np.array([pos_errs1, pos_errs2])
+    traj_res = [result.GetCosts(), result.GetConstraints()]
+    
+    suturing_logger.log(segment_info, pos_errs, traj_res)
+
     return traj
