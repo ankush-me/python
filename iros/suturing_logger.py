@@ -65,7 +65,5 @@ def log (seg_info, pos_errs, traj_res):
         suturing_info = {'perturbations' : perturbations,
                          'recording_fname' : scene_recording_fname,
                          'segments_info' : segments_info}
-        print suturing_info
         info_file = open(save_path, 'wb')
         cPickle.dump(suturing_info, info_file, protocol=2)
-        
