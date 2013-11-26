@@ -23,7 +23,6 @@ def log (seg_info, pos_errs, traj_res):
     global segments_info, num_segs, curr_seg, scene_recording_fname
     global seg_call_num, curr_seg_info, save_path, perturbations
 
-    seg_call_num += 1
 
     #=============== demo-level info ===========:
     if perturbations == None:
@@ -39,12 +38,6 @@ def log (seg_info, pos_errs, traj_res):
         save_path = scene_recording_fname[:-4] + '-costs.txt'
     #===========================================
 
-    # start new segment-level information
-    if seg_call_num==2:
-        curr_seg += 1
-        seg_call_num = 0
-        segments_info.append(curr_seg_info)
-        curr_seg_info = {}
 
     #========= segment level information ================
     if not curr_seg_info.has_key('warp_costs'):
@@ -58,7 +51,15 @@ def log (seg_info, pos_errs, traj_res):
 
     if seg_call_num==1:
         curr_seg_info['larm_costs'] = (pos_errs, traj_res)
-        
+
+    seg_call_num += 1
+
+    # start new segment-level information
+    if seg_call_num==2:
+        curr_seg += 1
+        seg_call_num = 0
+        segments_info.append(curr_seg_info)
+        curr_seg_info = {}       
 
     ## then this is the last call to this logger, hence, dump the info to a file:
     if curr_seg >= num_segs:

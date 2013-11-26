@@ -258,11 +258,12 @@ def plan_follow_traj2(robot, manip_name, link1_name, new_hmats1, link2_name, new
     for i_step in xrange(1,n_steps):
         row = traj[i_step]
         robot.SetDOFValues(row, arm_inds)
-        tf1 = link1.GetTransform()
-        tf2 = link2.GetTransform()
-        pos1, pos2 = tf1[:3,3], tf2[:3,3]
-        pos_err1 = np.linalg.norm(poses1[i_step][4:7] - pos1)
-        pos_err2 = np.linalg.norm(poses2[i_step][4:7] - pos2)
+        tf1 = openravepy.matrixFromPose(link1.GetTransform())
+        tf2 = openravepy.matrixFromPose(link2.GetTransform())
+
+        pos_err1 = np.linalg.inv(new_hmats1[i_step]).dot(tf1)
+        pos_err2 = np.linalg.inv(new_hmats2[i_step]).dot(tf2)
+
         pos_errs1.append(pos_err1)
         pos_errs2.append(pos_err2)
 
